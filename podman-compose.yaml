@@ -1,0 +1,242 @@
+# This file sets up a complete Home Assistant stack running as ROOT.
+# 1. Home Assistant Core (for the UI and automation)
+# 2. Z-Wave JS UI (Zwave door lock)
+# 3. Matter Hub and Server for connecting Zwave device to Google Home
+# 4. AirConnect (for making google cast devices discoverable as airplay points) NOT WORKING
+
+# Use 'sudo podman-compose up -d' to start all services.
+
+version: "3.8"
+services:
+  # -----------------------------------------------------------------
+  # 1. HOME ASSISTANT SERVICE
+  # -----------------------------------------------------------------
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+
+    # CRITICAL: Use host network mode for device discovery (mDNS, UPnP)
+    network_mode: host
+
+    restart: unless-stopped
+    privileged: true
+
+    volumes:
+      - ./config/ha:/config:Z # Home Assistant configuration
+      - /etc/localtime:/etc/localtime:ro
+      # ENABLED: DBus mapping for Bluetooth (Works because we are running as Root)
+      - /run/dbus:/run/dbus:ro
+
+    environment:
+      - TZ=${TZ} # <<--- CHANGE THIS TO YOUR TIMEZONE!
+
+  # -----------------------------------------------------------------
+  # 3. Z-WAVE JS UI (Z-Wave controller & MQTT bridge) SERVICE
+  # -----------------------------------------------------------------
+  zwave-js-ui:
+    image: zwavejs/zwave-js-ui:latest
+    container_name: zwave-js-ui
+    restart: unless-stopped
+
+    # The privileged flag is necessary for hardware access
+    privileged: true
+
+    # UI Port (8091) and Z-Wave WebSocket Port (3000)
+    ports:
+      - "8091:8091" # Web UI for Z-Wave configuration
+      - "3000:3000" # Z-Wave JS WebSocket
+
+    volumes:
+      # Configuration, logs, and network cache persistence
+      - ./config/zwave-js-ui:/usr/src/app/store:Z
+      - /etc/localtime:/etc/localtime:ro
+
+    # CRITICAL: Passthrough for the Z-Wave USB stick.
+    devices:
+      - /dev/ttyUSB0:/dev/zwave
+
+    environment:
+      # Security key for the Web UI session. Change this!
+      - SESSION_SECRET=${ZWAVE_SESSION_SECRET}
+      - TZ=${TZ} # <<--- CHANGE THIS TO YOUR TIMEZONE!
+      # Connection settings for Mosquitto
+  #      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+
+  # -----------------------------------------------------------------
+  # MATTER SERVER (Required for Matter support in HA Container)
+  # -----------------------------------------------------------------
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: matter-server
+    restart: unless-stopped
+    # CRITICAL: Must use host network for mDNS/IPv6 discovery
+    network_mode: host
+    security_opt:
+      # specific for AppArmor, usually required for standard Docker;
+      # might not be needed for Podman but harmless to include.
+      - label=disable
+    volumes:
+      # Persist Matter data (fabric keys, device list)
+      - ./config/matter:/data:Z
+      # REQUIRED: specific for Bluetooth/Thread commissioning
+      - /run/dbus:/run/dbus:ro
+
+  # -----------------------------------------------------------------
+  # MATTER HUB (Bridges HA devices TO Google Home)
+  # -----------------------------------------------------------------
+  matter-hub:
+    image: ghcr.io/t0bst4r/home-assistant-matter-hub:latest
+    container_name: matter-hub
+    restart: unless-stopped
+    # CRITICAL: Must use host network for Google to find it
+    network_mode: host
+    environment:
+      # URL of your Home Assistant (Localhost usually works in host mode)
+      - HAMH_HOME_ASSISTANT_URL=http://localhost:8123
+      # Paste the huge token you generated in Step 1 below
+      - HAMH_HOME_ASSISTANT_ACCESS_TOKEN=${HAMH_ACCESS_TOKEN}
+      # Optional: Level of logging (info, debug, warn)
+      - HAMH_LOG_LEVEL=info
+    volumes:
+      # Persist the bridge data (pairing keys)
+      - ./config/matter-hub:/data:Z
+
+  # -----------------------------------------------------------------
+  # PROWLARR (Indexer Manager/Proxy)
+  # -----------------------------------------------------------------
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+
+    ports:
+      - "9696:9696" # Web UI for Prowlarr
+
+    volumes:
+      # Configuration and database persistence
+      - ./config/prowlarr:/config:Z
+      - /etc/localtime:/etc/localtime:ro
+
+    environment:
+      - TZ=${TZ} # <<--- CHANGE THIS TO YOUR TIMEZONE!
+      # Optional: Set PUID/PGID if you need specific user permissions
+      # - PUID=1000
+      # - PGID=1000
+
+  # -----------------------------------------------------------------
+  # AIRCONNECT (AirPlay for Chromecast & Sonos)
+  # -----------------------------------------------------------------
+  #  airconnect:
+  #    image: 1activegeek/airconnect
+  #    container_name: airconnect
+  #    restart: unless-stopped
+  # CRITICAL: Must use host network to find speakers & advertise AirPlay
+  #    network_mode: host
+  #    environment:
+  #       - AIRCAST_VAR=-Z -x /config/aircast.xml -d all=sdebug -a 45152:128
+  # Optional: Set to 'kill' if you don't have Sonos/UPnP speakers
+  # - AIRUPNP_VAR=kill
+  # Optional: Set to 'kill' if you don't have Chromecasts
+  # - AIRCAST_VAR=kill
+
+  # -----------------------------------------------------------------
+  # 2. MOSQUITTO (MQTT BROKER) SERVICE
+  # -----------------------------------------------------------------
+  #  mosquitto:
+  #    image: eclipse-mosquitto:latest
+  #    container_name: mosquitto
+  #    restart: unless-stopped
+
+  # Map the default MQTT ports to the host
+  #    ports:
+  #      - "1883:1883"
+  #      - "9001:9001"
+
+  #    volumes:
+  # Mosquitto config file
+  #      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+  #      - ./config/mosquitto:/mosquitto/config:Z
+  # Persistence for data and logs (Added :Z for SELinux compatibility)
+  #      - ./config/mosquitto/data:/mosquitto/data:Z
+  #      - ./config/mosquitto/log:/mosquitto/log:Z
+
+  # -----------------------------------------------------------------
+  # GITHUB ACTIONS RUNNER (Self-hosted runner for AudioVibes)
+  # -----------------------------------------------------------------
+  github-runner:
+    image: myoung34/github-runner:latest
+    container_name: github-runner
+    restart: unless-stopped
+    # Privileged is often needed for DIND or Sibling containers
+    privileged: true
+    environment:
+      - REPO_URL=${RUNNER_REPO_URL}
+      - RUNNER_TOKEN=${RUNNER_REGISTRATION_TOKEN}
+      - RUNNER_NAME=fedora-m1-runner
+      - RUNNER_LABELS=linux,arm64,fedora,m1
+      - CONTAINER_ENGINE=podman
+    volumes:
+      # Map Podman socket to Docker socket inside for runner to spawn containers
+      - /run/podman/podman.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+
+  # -----------------------------------------------------------------
+  # MCP SERVERS (Network-exposed for Remote Agents)
+  # -----------------------------------------------------------------
+  # Uses Supergateway to expose MCP servers via HTTP/Streamable HTTP
+  # These can be reached by remote AI agents on the network
+
+  # CONTEXT7 MCP - Live documentation and code examples for libraries
+  # Endpoint: http://<server-ip>:8002/mcp
+  # Health:   http://<server-ip>:8002/health
+  context7-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp-servers
+    container_name: context7-mcp
+    restart: unless-stopped
+    command:
+      - npx
+      - "-y"
+      - supergateway
+      - --stdio
+      - "npx -y @upstash/context7-mcp"
+      - --outputTransport
+      - streamableHttp
+      - --port
+      - "8000"
+      - --cors
+      - --healthEndpoint
+      - /health
+    ports:
+      - "8002:8000"
+    environment:
+      - TZ=${TZ}
+
+  # SOSUMI MCP - Apple Developer docs (Swift, SwiftUI, HIG)
+  # Endpoint: http://<server-ip>:8001/mcp
+  # Health:   http://<server-ip>:8001/health
+  # Note: Proxies https://sosumi.ai/mcp for local reliability
+  sosumi-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp-servers
+    container_name: sosumi-mcp
+    restart: unless-stopped
+    command:
+      - npx
+      - "-y"
+      - supergateway
+      - --stdio
+      - "npx -y mcp-remote https://sosumi.ai/mcp"
+      - --outputTransport
+      - streamableHttp
+      - --port
+      - "8000"
+      - --cors
+      - --healthEndpoint
+      - /health
+    ports:
+      - "8001:8000"
+    environment:
+      - TZ=${TZ}

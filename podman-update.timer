@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Podman Update Script Periodically
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Unit=podman-update.service
+
+[Install]
+WantedBy=timers.target

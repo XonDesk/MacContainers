@@ -1,0 +1,5 @@
+# Config directories (local service data)
+config/
+
+# Environment files (optional, for future use)
+.env

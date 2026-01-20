@@ -1,0 +1,22 @@
+# MCP Servers Container
+# Provides network-exposed MCP servers for remote Antigravity agents
+# Uses Supergateway to expose stdio MCP servers via HTTP/Streamable HTTP
+FROM node:20-alpine
+
+# Install global MCP packages:
+# - supergateway: Exposes stdio MCP servers over HTTP/SSE
+# - mcp-remote: Proxies remote HTTP MCP servers to stdio
+# - @upstash/context7-mcp: Live documentation and code examples
+RUN npm install -g \
+    supergateway \
+    mcp-remote \
+    @upstash/context7-mcp
+
+# Create non-root user for security
+RUN addgroup -g 1001 mcp && adduser -u 1001 -G mcp -s /bin/sh -D mcp
+USER mcp
+
+WORKDIR /app
+
+# Default command (override per-service in compose)
+CMD ["node", "--version"]
