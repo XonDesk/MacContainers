@@ -1,0 +1,2 @@
+# Run every 12 hours at midnight and noon
+0 0,12 * * * /app/sync.sh >> /var/log/hausofsutra/sync.log 2>&1

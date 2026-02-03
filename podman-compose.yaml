@@ -34,7 +34,7 @@ services:
   # 3. Z-WAVE JS UI (Z-Wave controller & MQTT bridge) SERVICE
   # -----------------------------------------------------------------
   zwave-js-ui:
-    image: zwavejs/zwave-js-ui:latest
+    image: docker.io/zwavejs/zwave-js-ui:latest
     container_name: zwave-js-ui
     restart: unless-stopped
 
@@ -164,7 +164,7 @@ services:
   # GITHUB ACTIONS RUNNER (Self-hosted runner for AudioVibes)
   # -----------------------------------------------------------------
   github-runner:
-    image: myoung34/github-runner:latest
+    image: docker.io/myoung34/github-runner:latest
     container_name: github-runner
     restart: unless-stopped
     # Privileged is often needed for DIND or Sibling containers
@@ -240,3 +240,21 @@ services:
       - "8001:8000"
     environment:
       - TZ=${TZ}
+
+  # -----------------------------------------------------------------
+  # HAUSOFSUTRA INSTAGRAM SYNC (Automated Instagram feed sync)
+  # -----------------------------------------------------------------
+  # Syncs Instagram posts from @hausofsutra to GitHub Pages repo
+  # Runs every 12 hours via cron (midnight and noon)
+  hausofsutra-sync:
+    build: ./hausofsutra
+    container_name: hausofsutra-sync
+    restart: unless-stopped
+    volumes:
+      - ~/.ssh/Macserver:/home/syncuser/.ssh/id_ed25519_mounted:ro,Z
+      - ./config/hausofsutra:/var/log/hausofsutra:Z
+    environment:
+      - TZ=${TZ}
+      - GIT_USER_NAME=${HAUSOFSUTRA_GIT_NAME}
+      - GIT_USER_EMAIL=${HAUSOFSUTRA_GIT_EMAIL}
+      - GITHUB_REPO=${HAUSOFSUTRA_REPO}

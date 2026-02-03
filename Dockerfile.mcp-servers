@@ -1,7 +1,7 @@
 # MCP Servers Container
 # Provides network-exposed MCP servers for remote Antigravity agents
 # Uses Supergateway to expose stdio MCP servers via HTTP/Streamable HTTP
-FROM node:20-alpine
+FROM docker.io/library/node:20-alpine
 
 # Install global MCP packages:
 # - supergateway: Exposes stdio MCP servers over HTTP/SSE

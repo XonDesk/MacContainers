@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-PROJECT_DIR="/home/mattjackson/FedoraServer" # ADJUST THIS PATH TO YOUR SERVER'S PATH
+PROJECT_DIR="/Users/mjackson/Documents/MacContainers" # ADJUST THIS PATH TO YOUR SERVER'S PATH
 BRANCH="main"
 
 # Navigate to project directory
