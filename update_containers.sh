@@ -8,12 +8,21 @@ BRANCH="main"
 cd "$PROJECT_DIR" || exit 1
 
 # Fetch the latest changes from the remote
-# Ensure your SSH key is loaded in your agent or key is passwordless
-git fetch origin
+# We use sudo -u to run git commands as the directory owner if we are running as root
+# This prevents file permission issues
+DIR_OWNER=$(stat -c '%U' "$PROJECT_DIR")
+
+if [ "$(id -u)" -eq 0 ] && [ "$DIR_OWNER" != "root" ]; then
+    GIT_CMD="sudo -u $DIR_OWNER git"
+else
+    GIT_CMD="git"
+fi
+
+$GIT_CMD fetch origin
 
 # Check if we are behind the remote
-LOCAL=$(git rev-parse @)
-REMOTE=$(git rev-parse "origin/$BRANCH")
+LOCAL=$($GIT_CMD rev-parse @)
+REMOTE=$($GIT_CMD rev-parse "origin/$BRANCH")
 
 if [ "$LOCAL" != "$REMOTE" ]; then
     echo "Updates detected. Pulling changes..."
@@ -24,10 +33,10 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     }
 
     log "Pulling from $BRANCH..."
-    git pull origin "$BRANCH"
+    $GIT_CMD pull origin "$BRANCH"
     
     log "Restarting containers..."
-    # Using sudo if required, or rootless if configured
+    # Configured to run as root via systemd since containers are rootful
     podman-compose down
     podman-compose up -d
     
