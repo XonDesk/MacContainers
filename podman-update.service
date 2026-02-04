@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=oneshot
-# User=root # Run as root to manage system containers
-WorkingDirectory=/home/mattjackson/FedoraServer # CHANGE THIS
-ExecStart=/bin/bash /home/mattjackson/FedoraServer/update_containers.sh # CHANGE THIS
+User=mjackson
+WorkingDirectory=/home/mjackson/MacContainers
+ExecStart=/bin/bash /home/mjackson/MacContainers/update_containers.sh
 
 [Install]
 WantedBy=multi-user.target

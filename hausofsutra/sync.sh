@@ -3,6 +3,9 @@ set -e
 
 echo "=== Instagram Sync Started: $(date) ==="
 
+# Ensure SSH uses the correct key (cron has a minimal environment)
+export GIT_SSH_COMMAND="ssh -i /home/syncuser/.ssh/id_ed25519 -o StrictHostKeyChecking=no"
+
 cd /app/repo
 
 # Pull latest changes

@@ -27,6 +27,9 @@ echo "Configuring git..."
 su - syncuser -c "git config --global user.name '${GIT_USER_NAME:-Hausofsutra Bot}'"
 su - syncuser -c "git config --global user.email '${GIT_USER_EMAIL:-bot@hausofsutra.local}'"
 
+# Ensure syncuser owns the app directory before clone
+chown -R syncuser:syncuser /app
+
 # Clone repo if not present
 if [ ! -d /app/repo/.git ]; then
     echo "Cloning repository..."
@@ -35,9 +38,6 @@ else
     echo "Repository already exists, pulling latest..."
     su - syncuser -c "cd /app/repo && git pull --rebase"
 fi
-
-# Ensure syncuser owns the app directory
-chown -R syncuser:syncuser /app
 
 # Export environment variables for cron
 printenv | grep -E '^(GIT_|GITHUB_|TZ)' > /etc/environment

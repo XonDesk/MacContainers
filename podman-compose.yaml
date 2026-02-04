@@ -1,10 +1,10 @@
-# This file sets up a complete Home Assistant stack running as ROOT.
+# Home Assistant stack — runs ROOTLESS as mjackson.
 # 1. Home Assistant Core (for the UI and automation)
 # 2. Z-Wave JS UI (Zwave door lock)
 # 3. Matter Hub and Server for connecting Zwave device to Google Home
 # 4. AirConnect (for making google cast devices discoverable as airplay points) NOT WORKING
 
-# Use 'sudo podman-compose up -d' to start all services.
+# Use 'podman-compose up -d' to start all services (no sudo).
 
 version: "3.8"
 services:
@@ -38,9 +38,6 @@ services:
     container_name: zwave-js-ui
     restart: unless-stopped
 
-    # The privileged flag is necessary for hardware access
-    privileged: true
-
     # UI Port (8091) and Z-Wave WebSocket Port (3000)
     ports:
       - "8091:8091" # Web UI for Z-Wave configuration
@@ -54,6 +51,9 @@ services:
     # CRITICAL: Passthrough for the Z-Wave USB stick.
     devices:
       - /dev/ttyUSB0:/dev/zwave
+    # Keep host supplementary groups (dialout) so rootless podman can access the USB device
+    group_add:
+      - keep-groups
 
     environment:
       # Security key for the Web UI session. Change this!
@@ -104,40 +104,41 @@ services:
   # -----------------------------------------------------------------
   # PROWLARR (Indexer Manager/Proxy)
   # -----------------------------------------------------------------
-  prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest
-    container_name: prowlarr
-    restart: unless-stopped
-
-    ports:
-      - "9696:9696" # Web UI for Prowlarr
-
-    volumes:
-      # Configuration and database persistence
-      - ./config/prowlarr:/config:Z
-      - /etc/localtime:/etc/localtime:ro
-
-    environment:
-      - TZ=${TZ} # <<--- CHANGE THIS TO YOUR TIMEZONE!
-      # Optional: Set PUID/PGID if you need specific user permissions
-      # - PUID=1000
-      # - PGID=1000
+  # prowlarr:
+  #   image: lscr.io/linuxserver/prowlarr:latest
+  #   container_name: prowlarr
+  #   restart: unless-stopped
+  #
+  #   ports:
+  #     - "9696:9696" # Web UI for Prowlarr
+  #
+  #   volumes:
+  #     # Configuration and database persistence
+  #     - ./config/prowlarr:/config:Z
+  #     - /etc/localtime:/etc/localtime:ro
+  #
+  #   environment:
+  #     - TZ=${TZ}
+  #     # Optional: Set PUID/PGID if you need specific user permissions
+  #     # - PUID=1000
+  #     # - PGID=1000
 
   # -----------------------------------------------------------------
   # AIRCONNECT (AirPlay for Chromecast & Sonos)
   # -----------------------------------------------------------------
-  #  airconnect:
-  #    image: 1activegeek/airconnect
-  #    container_name: airconnect
-  #    restart: unless-stopped
-  # CRITICAL: Must use host network to find speakers & advertise AirPlay
-  #    network_mode: host
-  #    environment:
-  #       - AIRCAST_VAR=-Z -x /config/aircast.xml -d all=sdebug -a 45152:128
-  # Optional: Set to 'kill' if you don't have Sonos/UPnP speakers
-  # - AIRUPNP_VAR=kill
-  # Optional: Set to 'kill' if you don't have Chromecasts
-  # - AIRCAST_VAR=kill
+  airconnect:
+    image: docker.io/1activegeek/airconnect
+    container_name: airconnect
+    restart: unless-stopped
+    # CRITICAL: Must use host network to find speakers & advertise AirPlay
+    network_mode: host
+    environment:
+      # Note: Do NOT use -Z (daemonize) — conflicts with the container's s6 supervisor
+      # Set either to 'kill' to disable that service:
+      #   AIRUPNP_VAR=kill  — disable Sonos/UPnP if you only have Chromecasts
+      #   AIRCAST_VAR=kill   — disable Chromecast if you only have Sonos/UPnP
+      - AIRCAST_VAR=-d all=info
+      - AIRUPNP_VAR=-d all=info
 
   # -----------------------------------------------------------------
   # 2. MOSQUITTO (MQTT BROKER) SERVICE
@@ -163,22 +164,20 @@ services:
   # -----------------------------------------------------------------
   # GITHUB ACTIONS RUNNER (Self-hosted runner for AudioVibes)
   # -----------------------------------------------------------------
-  github-runner:
-    image: docker.io/myoung34/github-runner:latest
-    container_name: github-runner
-    restart: unless-stopped
-    # Privileged is often needed for DIND or Sibling containers
-    privileged: true
-    environment:
-      - REPO_URL=${RUNNER_REPO_URL}
-      - RUNNER_TOKEN=${RUNNER_REGISTRATION_TOKEN}
-      - RUNNER_NAME=fedora-m1-runner
-      - RUNNER_LABELS=linux,arm64,fedora,m1
-      - CONTAINER_ENGINE=podman
-    volumes:
-      # Map Podman socket to Docker socket inside for runner to spawn containers
-      - /run/podman/podman.sock:/var/run/docker.sock
-      - /etc/localtime:/etc/localtime:ro
+  # github-runner:
+  #   image: docker.io/myoung34/github-runner:latest
+  #   container_name: github-runner
+  #   restart: unless-stopped
+  #   environment:
+  #     - REPO_URL=${RUNNER_REPO_URL}
+  #     - RUNNER_TOKEN=${RUNNER_REGISTRATION_TOKEN}
+  #     - RUNNER_NAME=fedora-m1-runner
+  #     - RUNNER_LABELS=linux,arm64,fedora,m1
+  #     - CONTAINER_ENGINE=podman
+  #   volumes:
+  #     # Rootless podman socket — requires: systemctl --user enable --now podman.socket
+  #     - /run/user/1000/podman/podman.sock:/var/run/docker.sock
+  #     - /etc/localtime:/etc/localtime:ro
 
   # -----------------------------------------------------------------
   # MCP SERVERS (Network-exposed for Remote Agents)
