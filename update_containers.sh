@@ -14,22 +14,20 @@ git fetch origin
 LOCAL=$(git rev-parse @)
 REMOTE=$(git rev-parse "origin/$BRANCH")
 
-if [ "$LOCAL" != "$REMOTE" ]; then
-    echo "Updates detected. Pulling changes..."
-    
-    # helper for logging
-    log() {
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
-    }
+# helper for logging
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+}
 
-    log "Pulling from $BRANCH..."
+if [ "$LOCAL" != "$REMOTE" ]; then
+    log "Updates detected. Pulling from $BRANCH..."
     git pull origin "$BRANCH"
 
-    log "Restarting containers..."
+    log "Restarting containers after update..."
     podman-compose down
-    podman-compose up -d
-    
-    log "Update complete."
-else
-    echo "No updates found."
 fi
+
+# Always ensure all containers are running (idempotent)
+log "Ensuring containers are up..."
+podman-compose up -d
+log "Done."

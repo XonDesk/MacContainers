@@ -24,8 +24,8 @@ services:
     volumes:
       - ./config/ha:/config:Z # Home Assistant configuration
       - /etc/localtime:/etc/localtime:ro
-      # ENABLED: DBus mapping for Bluetooth (Works because we are running as Root)
-      - /run/dbus:/run/dbus:ro
+      # DISABLED: DBus mapping for Bluetooth (doesn't work in rootless mode)
+      # - /run/dbus:/run/dbus:ro
 
     environment:
       - TZ=${TZ} # <<--- CHANGE THIS TO YOUR TIMEZONE!
