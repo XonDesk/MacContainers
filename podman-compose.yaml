@@ -51,9 +51,14 @@ services:
     # CRITICAL: Passthrough for the Z-Wave USB stick.
     devices:
       - /dev/ttyUSB0:/dev/zwave
-    # Keep host supplementary groups (dialout) so rootless podman can access the USB device
+    # dialout GID (18) gives group read/write on the USB device
     group_add:
-      - keep-groups
+      - "18"
+    # Required: disables SELinux labeling for this container so it can access
+    # the usbtty_device_t SELinux type on /dev/ttyUSB0. Rootless containers
+    # don't have a policy entry for this device type without this flag.
+    security_opt:
+      - label=disable
 
     environment:
       # Security key for the Web UI session. Change this!
